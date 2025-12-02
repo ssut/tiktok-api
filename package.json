@@ -6,6 +6,9 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "private": false,
+  "repository": {
+    "url": "https://github.com/ssut/tiktok-api"
+  },
   "publishConfig": {
     "access": "public"
   },
