@@ -1,19 +1,22 @@
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
+
+permissions:
+  id-token: write # Required for OIDC
+  contents: read
 
 jobs:
   publish:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v1
-      - uses: actions/setup-node@v1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
+          registry-url: "https://registry.npmjs.org"
           node-version: 24
-      - run: npm install
-      - run: npm run build
-      - uses: JS-DevTools/npm-publish@v1
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          package: package.json
+          cache: "pnpm"
+      - run: npm install -g --force corepack && corepack enable
+      - run: pnpm build
+      - run: pnpm publish --access public
