@@ -1,5 +1,6 @@
 import { DEFAULT_MS_TOKEN } from '../../constants/tokens';
 import { generateDeviceId, generateOdinId } from '../../utils/helpers';
+import { PostItemRequestType } from './types';
 
 const LANG = 'en';
 
@@ -10,6 +11,7 @@ export const getUserPostsParams = ({
   secUid,
   msToken,
   region,
+  requestType,
 }: {
   userAgent: string;
   count: number;
@@ -17,6 +19,7 @@ export const getUserPostsParams = ({
   secUid: string;
   msToken?: string;
   region: string;
+  requestType?: PostItemRequestType;
 }) => {
   return {
     count,
@@ -49,7 +52,8 @@ export const getUserPostsParams = ({
     odinId: generateOdinId(),
     os: 'mac',
     priority_region: '',
-    post_item_list_request_type: 0,
+    post_item_list_request_type:
+      requestType ?? PostItemRequestType.Latest,
     referer: '',
     region: region ?? 'GB',
     screen_height: 1440,

@@ -24,6 +24,7 @@ import { getUserParams } from './getUser/params';
 import type { TiktokStalkUserResponse } from './getUser/types';
 import { getUserPostsParams } from './getUserPosts/params';
 import type {
+  PostItemRequestType,
   TiktokPostItem,
   TiktokUserPostsAPIResponse,
   TiktokUserPostsResponse,
@@ -196,20 +197,29 @@ export class TikTokClient {
    */
   public async getUserPosts(
     secUid: string,
-    postLimit?: number,
-    options?: { nextCursor?: number },
+    options?: {
+      postLimit?: number;
+      nextCursor?: number;
+      requestType?: PostItemRequestType;
+    },
   ): Promise<TiktokUserPostsResponse> {
     try {
       const posts: TiktokPostItem[] = [];
       const seenIds = new Set<string>();
       let hasMore = true;
       let cursor = options?.nextCursor ?? 0;
+      const postLimit = options?.postLimit;
       let isFirstPage = cursor === 0;
       let lastCursor: string | undefined;
 
       while (hasMore) {
         const count = isFirstPage ? FIRST_PAGE_POST_COUNT : DEFAULT_POST_COUNT;
-        const pageResult = await this.fetchUserPostsPage(secUid, count, cursor);
+        const pageResult = await this.fetchUserPostsPage(
+          secUid,
+          count,
+          cursor,
+          options?.requestType,
+        );
 
         const list = pageResult?.itemList ?? [];
         for (const item of list) {
@@ -438,6 +448,7 @@ export class TikTokClient {
     secUid: string,
     count: number,
     cursor: number,
+    requestType?: PostItemRequestType,
   ): Promise<TiktokUserPostsAPIResponse | null> {
     return retry(async (bail) => {
       try {
@@ -448,6 +459,7 @@ export class TikTokClient {
           secUid,
           region: this.region,
           msToken: this.msToken,
+          requestType,
         });
 
         const signedUrl = signUrl({

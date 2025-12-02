@@ -1,6 +1,8 @@
-// Generated from sample TikTok item_list response (result.json).
-// Fields are kept flexible (mostly string/number/boolean/arrays) to accommodate
-// future TikTok schema changes while still providing structure.
+export enum PostItemRequestType {
+  Latest = 0,
+  Popular = 1,
+  Oldest = 2,
+}
 
 export interface TiktokUserPostsAPIResponse {
   cursor: string;

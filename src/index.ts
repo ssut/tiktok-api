@@ -1,5 +1,6 @@
 export { TikTokClient } from './api/client';
 export type { TiktokChallengeResponse } from './api/getChallenge/types';
+export { PostItemRequestType } from './api/getUserPosts/types';
 export type {
   TiktokComment,
   TiktokCommentListAPIResponse,

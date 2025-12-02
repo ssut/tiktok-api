@@ -22,7 +22,7 @@ npm install axios async-retry https-proxy-agent
 ### ES Modules
 
 ```typescript
-import { TikTokClient } from "@ssut/tiktok-api";
+import { TikTokClient, PostItemRequestType } from "@ssut/tiktok-api";
 
 const client = new TikTokClient({ region: "US" });
 
@@ -36,7 +36,10 @@ if (userResult.error) {
 }
 
 // Get user posts (pass msToken automatically managed by the client)
-const postsResult = await client.getUserPosts(userResult.data?.userInfo.user.secUid ?? "", 10);
+const postsResult = await client.getUserPosts(
+  userResult.data?.userInfo.user.secUid ?? "",
+  { postLimit: 10, requestType: PostItemRequestType.Popular },
+);
 if (postsResult.error) {
   console.error("Error:", postsResult.error);
 } else {
@@ -101,9 +104,9 @@ Create a client with shared Axios instance, proxy, region, and msToken.
 
 Fetch user profile information.
 
-### `client.getUserPosts(secUid: string, postLimit?: number, options?: { nextCursor?: number }): Promise<TiktokUserPostsResponse>`
+### `client.getUserPosts(secUid: string, options?: { postLimit?: number; nextCursor?: number; requestType?: PostItemRequestType }): Promise<TiktokUserPostsResponse>`
 
-Fetch user posts with automatic msToken rotation and paginated cursor support (35 on first page, 16 afterwards). Items are returned as-is from the API; duplicates are filtered by `id`.
+Fetch user posts with automatic msToken rotation and paginated cursor support (35 on first page, 16 afterwards). Items are returned as-is from the API; duplicates are filtered by `id`. Use `requestType` to control ordering: `Latest` (0), `Popular` (1), or `Oldest` (2).
 
 ### `client.getPostComments(awemeId: string, count = 20, options?: { cursor?: number }): Promise<TiktokPostCommentsResponse>`
 
@@ -143,6 +146,7 @@ import type {
   TiktokUserPostsResponse,
   TiktokPostItem,
   Posts,
+  PostItemRequestType,
   TiktokChallengeResponse,
   TiktokError,
 } from "@ssut/tiktok-api";
