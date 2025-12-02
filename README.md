@@ -43,6 +43,23 @@ if (postsResult.error) {
   console.log("Posts:", postsResult.data);
 }
 
+// Get comments for a post
+const commentsResult = await client.getPostComments("7574735526134058262", 20);
+if (commentsResult.error) {
+  console.error("Comments error:", commentsResult.error);
+} else {
+  console.log("First comment text:", commentsResult.data?.[0]?.text);
+  console.log("Next cursor:", commentsResult.cursor);
+}
+
+// Get replies for a specific comment
+const repliesResult = await client.getCommentReplies("7574735526134058262", commentsResult.data?.[0]?.cid ?? "", 10);
+if (repliesResult.error) {
+  console.error("Replies error:", repliesResult.error);
+} else {
+  console.log("First reply:", repliesResult.data?.[0]?.text);
+}
+
 // Get challenge/hashtag info
 const challengeResult = await client.getChallenge("fyp");
 if (challengeResult.error) {
@@ -87,6 +104,14 @@ Fetch user profile information.
 ### `client.getUserPosts(secUid: string, postLimit?: number, options?: { nextCursor?: number }): Promise<TiktokUserPostsResponse>`
 
 Fetch user posts with automatic msToken rotation and paginated cursor support (35 on first page, 16 afterwards). Items are returned as-is from the API; duplicates are filtered by `id`.
+
+### `client.getPostComments(awemeId: string, count = 20, options?: { cursor?: number }): Promise<TiktokPostCommentsResponse>`
+
+Fetch comments for a specific post. Items are returned as-is from the API; duplicates are filtered by `cid`. Returns `hasMore` and the last `cursor` when available.
+
+### `client.getCommentReplies(awemeId: string, commentId: string, count = 20, options?: { cursor?: number }): Promise<TiktokPostCommentsResponse>`
+
+Fetch replies for a given comment `commentId` under a post `awemeId`. Items are returned as-is from the API; duplicates filtered by `cid`, with pagination via `cursor`.
 
 ### `client.getChallenge(hashtag: string): Promise<{ error?: string; statusCode?: number; data: TiktokChallengeResponse | null }>`
 

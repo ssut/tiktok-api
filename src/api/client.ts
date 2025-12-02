@@ -8,9 +8,18 @@ import { extractMsToken } from '../utils/helpers';
 import { signUrl } from '../utils/signUrl';
 import { getChallengeParams } from './getChallenge/params';
 import type { TiktokChallengeResponse } from './getChallenge/types';
+import {
+  getCommentRepliesParams,
+  getPostCommentsParams,
+} from './getPostComments/params';
+import type {
+  TiktokComment,
+  TiktokCommentListAPIResponse,
+  TiktokCommentReplyListAPIResponse,
+  TiktokPostCommentsResponse,
+} from './getPostComments/types';
 // Params builders
 import { getUserParams } from './getUser/params';
-
 // Types
 import type { TiktokStalkUserResponse } from './getUser/types';
 import { getUserPostsParams } from './getUserPosts/params';
@@ -269,6 +278,162 @@ export class TikTokClient {
     }
   }
 
+  /**
+   * Fetch comments for a given post (aweme).
+   */
+  public async getPostComments(
+    awemeId: string,
+    count = 20,
+    options?: { cursor?: number },
+  ): Promise<TiktokPostCommentsResponse> {
+    try {
+      const comments: TiktokComment[] = [];
+      const seenIds = new Set<string>();
+      let cursor = options?.cursor ?? 0;
+      let hasMore = true;
+      let lastCursor = cursor;
+
+      while (hasMore) {
+        const page = await this.fetchPostCommentsPage(awemeId, count, cursor);
+
+        const list = page?.comments ?? [];
+        for (const c of list) {
+          if (seenIds.has(c.cid)) continue;
+          comments.push(c);
+          seenIds.add(c.cid);
+        }
+
+        hasMore = Boolean(page?.has_more);
+        if (page?.cursor !== undefined) {
+          lastCursor = Number(page.cursor);
+        }
+        cursor = hasMore ? Number(page?.cursor ?? 0) : 0;
+
+        if (!hasMore || list.length < count) {
+          hasMore = false;
+        }
+      }
+
+      return {
+        data: comments,
+        total: comments.length,
+        hasMore,
+        cursor: lastCursor,
+      };
+    } catch (err: any) {
+      if (
+        err.status === 400 ||
+        (err.response?.data &&
+          (err.response.data.statusCode === TiktokError.INVALID_ENTITY ||
+            err.response.data.status_code === TiktokError.INVALID_ENTITY))
+      ) {
+        return {
+          error: 'INVALID_ENTITY',
+          statusCode: TiktokError.INVALID_ENTITY,
+          data: null,
+          total: 0,
+        };
+      }
+
+      if (err.message === 'EMPTY_RESPONSE') {
+        return {
+          error: 'EMPTY_RESPONSE',
+          statusCode: 0,
+          data: null,
+          total: 0,
+        };
+      }
+
+      return {
+        error: 'UNKNOWN_ERROR',
+        statusCode: 0,
+        data: null,
+        total: 0,
+      };
+    }
+  }
+
+  /**
+   * Fetch replies for a specific comment under a post.
+   */
+  public async getCommentReplies(
+    awemeId: string,
+    commentId: string,
+    count = 20,
+    options?: { cursor?: number },
+  ): Promise<TiktokPostCommentsResponse> {
+    try {
+      const comments: TiktokComment[] = [];
+      const seenIds = new Set<string>();
+      let cursor = options?.cursor ?? 0;
+      let hasMore = true;
+      let lastCursor = cursor;
+
+      while (hasMore) {
+        const page = await this.fetchCommentRepliesPage(
+          awemeId,
+          commentId,
+          count,
+          cursor,
+        );
+
+        const list = page?.comments ?? [];
+        for (const c of list) {
+          if (seenIds.has(c.cid)) continue;
+          comments.push(c);
+          seenIds.add(c.cid);
+        }
+
+        hasMore = Boolean(page?.has_more);
+        if (page?.cursor !== undefined) {
+          lastCursor = Number(page.cursor);
+        }
+        cursor = hasMore ? Number(page?.cursor ?? 0) : 0;
+
+        if (!hasMore || list.length < count) {
+          hasMore = false;
+        }
+      }
+
+      return {
+        data: comments,
+        total: comments.length,
+        hasMore,
+        cursor: lastCursor,
+      };
+    } catch (err: any) {
+      if (
+        err.status === 400 ||
+        (err.response?.data &&
+          (err.response.data.statusCode === TiktokError.INVALID_ENTITY ||
+            err.response.data.status_code === TiktokError.INVALID_ENTITY))
+      ) {
+        return {
+          error: 'INVALID_ENTITY',
+          statusCode: TiktokError.INVALID_ENTITY,
+          data: null,
+          total: 0,
+        };
+      }
+
+      if (err.message === 'EMPTY_RESPONSE') {
+        return {
+          error: 'EMPTY_RESPONSE',
+          statusCode: 0,
+          data: null,
+          total: 0,
+        };
+      }
+
+      return {
+        error: 'UNKNOWN_ERROR',
+        statusCode: 0,
+        data: null,
+        total: 0,
+      };
+    }
+  }
+
   private async fetchUserPostsPage(
     secUid: string,
     count: number,
@@ -293,6 +458,108 @@ export class TikTokClient {
 
         const { data, headers } =
           await this.axios.get<TiktokUserPostsAPIResponse>(signedUrl);
+
+        const newMsToken = headers['x-ms-token'] as string | undefined;
+        if (newMsToken) {
+          this.msToken = newMsToken;
+        }
+
+        if (!data || (typeof data === 'string' && data === '')) {
+          throw new Error('EMPTY_RESPONSE');
+        }
+
+        return data;
+      } catch (error: any) {
+        if (
+          error.response?.status === 400 ||
+          error.response?.data?.statusCode === TiktokError.INVALID_ENTITY
+        ) {
+          const invalidError: any = new Error('INVALID_ENTITY');
+          invalidError.status = 400;
+          bail(invalidError);
+          return null;
+        }
+        throw error;
+      }
+    }, RETRY_OPTIONS);
+  }
+
+  private async fetchPostCommentsPage(
+    awemeId: string,
+    count: number,
+    cursor: number,
+  ): Promise<TiktokCommentListAPIResponse | null> {
+    return retry(async (bail) => {
+      try {
+        const params = getPostCommentsParams({
+          userAgent: USER_AGENT,
+          count,
+          cursor,
+          awemeId,
+          region: this.region,
+          msToken: this.msToken,
+        });
+
+        const signedUrl = signUrl({
+          url: `${TIKTOK_URL}/api/comment/list/`,
+          params,
+          userAgent: USER_AGENT,
+        });
+
+        const { data, headers } =
+          await this.axios.get<TiktokCommentListAPIResponse>(signedUrl);
+
+        const newMsToken = headers['x-ms-token'] as string | undefined;
+        if (newMsToken) {
+          this.msToken = newMsToken;
+        }
+
+        if (!data || (typeof data === 'string' && data === '')) {
+          throw new Error('EMPTY_RESPONSE');
+        }
+
+        return data;
+      } catch (error: any) {
+        if (
+          error.response?.status === 400 ||
+          error.response?.data?.statusCode === TiktokError.INVALID_ENTITY
+        ) {
+          const invalidError: any = new Error('INVALID_ENTITY');
+          invalidError.status = 400;
+          bail(invalidError);
+          return null;
+        }
+        throw error;
+      }
+    }, RETRY_OPTIONS);
+  }
+
+  private async fetchCommentRepliesPage(
+    awemeId: string,
+    commentId: string,
+    count: number,
+    cursor: number,
+  ): Promise<TiktokCommentReplyListAPIResponse | null> {
+    return retry(async (bail) => {
+      try {
+        const params = getCommentRepliesParams({
+          userAgent: USER_AGENT,
+          count,
+          cursor,
+          awemeId,
+          commentId,
+          region: this.region,
+          msToken: this.msToken,
+        });
+
+        const signedUrl = signUrl({
+          url: `${TIKTOK_URL}/api/comment/list/reply/`,
+          params,
+          userAgent: USER_AGENT,
+        });
+
+        const { data, headers } =
+          await this.axios.get<TiktokCommentReplyListAPIResponse>(signedUrl);
 
         const newMsToken = headers['x-ms-token'] as string | undefined;
         if (newMsToken) {
