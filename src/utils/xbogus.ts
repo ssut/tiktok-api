@@ -63,14 +63,19 @@ const xorKey = (buf: Buffer) => buf.reduce((acc, b) => acc ^ b, 0);
  * @param {number} timestamp  Unix-epoch seconds (unsigned 32-bit)
  * @returns {string} custom-Base-64 signature
  */
-function encrypt(params: string, postData: string, userAgent: string, timestamp: number): string {
-  const uaKey   = Buffer.from([0x00, 0x01, 0x0e]);
+function encrypt(
+  params: string,
+  postData: string,
+  userAgent: string,
+  timestamp: number,
+): string {
+  const uaKey = Buffer.from([0x00, 0x01, 0x0e]);
   const listKey = Buffer.from([0xff]);
   const fixedVal = 0x4a41279f; // 3845494467
 
   /* double-MD5s */
   const md5Params = stdMd5Enc(stdMd5Enc(Buffer.from(params, 'utf8')));
-  const md5Post   = stdMd5Enc(stdMd5Enc(Buffer.from(postData, 'utf8')));
+  const md5Post = stdMd5Enc(stdMd5Enc(Buffer.from(postData, 'utf8')));
 
   /* UA → RC4 → Base64 → MD5 */
   const uaRc4 = stdRc4Enc(uaKey, Buffer.from(userAgent, 'utf8'));
@@ -84,10 +89,18 @@ function encrypt(params: string, postData: string, userAgent: string, timestamp:
     md5Params.subarray(14, 16),
     md5Post.subarray(14, 16),
     md5Ua.subarray(14, 16),
-    (() => { const b = Buffer.allocUnsafe(4); b.writeUInt32BE(timestamp >>> 0); return b; })(),
-    (() => { const b = Buffer.allocUnsafe(4); b.writeUInt32BE(fixedVal);       return b; })(),
+    (() => {
+      const b = Buffer.allocUnsafe(4);
+      b.writeUInt32BE(timestamp >>> 0);
+      return b;
+    })(),
+    (() => {
+      const b = Buffer.allocUnsafe(4);
+      b.writeUInt32BE(fixedVal);
+      return b;
+    })(),
   ];
-  let buffer = Buffer.concat(parts);            // 18 bytes (so far)
+  let buffer = Buffer.concat(parts); // 18 bytes (so far)
 
   /* ✅ FIX: append checksum safely */
   const checksum = xorKey(buffer);

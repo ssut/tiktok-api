@@ -1,26 +1,15 @@
-export { getChallenge } from './api/getChallenge/index';
-export { getUser } from './api/getUser/index';
-export { getUserPosts } from './api/getUserPosts/index';
-
-// Export types
+export { TikTokClient } from './api/client';
+export type { TiktokChallengeResponse } from './api/getChallenge/types';
 export type {
-  TiktokChallengeResponse,
-} from './api/getChallenge/types';
-
-export type {
-  TiktokStalkUserResponse,
-  UserProfile,
   StatsUserProfile,
   StatsV2UserProfile,
+  TiktokStalkUserResponse,
+  UserProfile,
 } from './api/getUser/types';
-
 export type {
-  TiktokUserPostsResponse,
   Posts,
-  StatsPost,
-  AuthorPost,
-  VideoPost,
-  MusicPost,
+  TiktokPostItem,
+  TiktokUserPostsAPIResponse,
+  TiktokUserPostsResponse,
 } from './api/getUserPosts/types';
-
 export { TiktokError } from './constants/errors';

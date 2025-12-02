@@ -1,4 +1,4 @@
-import { Options } from 'async-retry';
+import type { Options } from 'async-retry';
 
 export const RETRY_OPTIONS: Options = {
   retries: 10,

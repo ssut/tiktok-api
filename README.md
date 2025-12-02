@@ -1,11 +1,12 @@
-# @rediska1114/tiktok-api
+# @ssut/tiktok-api
 
 TikTok API library for fetching user profiles, posts, and challenges using official TikTok API endpoints with URL signing (X-Bogus and X-Gnarly).
+Forked from `@rediska1114/tiktok-api` (ISC); credits to the original authors.
 
 ## Installation
 
 ```bash
-npm install @rediska1114/tiktok-api
+npm install @ssut/tiktok-api
 ```
 
 ## Peer Dependencies
@@ -21,112 +22,75 @@ npm install axios async-retry https-proxy-agent
 ### ES Modules
 
 ```typescript
-import { getUser, getUserPosts, getChallenge } from '@rediska1114/tiktok-api';
+import { TikTokClient } from "@ssut/tiktok-api";
+
+const client = new TikTokClient({ region: "US" });
 
 // Get user profile
-const userResult = await getUser('username', undefined, 'US');
+const userResult = await client.getUser("username");
 if (userResult.error) {
-  console.error('Error:', userResult.error);
-} else {
-  console.log('User:', userResult.data.userInfo.user);
-  console.log('Stats:', userResult.data.userInfo.stats);
-  console.log('msToken:', userResult.msToken);
+  console.error("Error:", userResult.error);
+} else if (userResult.data) {
+  console.log("User:", userResult.data.userInfo.user);
+  console.log("Stats:", userResult.data.userInfo.stats);
 }
 
-// Get user posts (with msToken from getUser response)
-const postsResult = await getUserPosts(
-  userResult.data.userInfo.user.secUid,
-  undefined,
-  10,
-  'US',
-  userResult.msToken
-);
+// Get user posts (pass msToken automatically managed by the client)
+const postsResult = await client.getUserPosts(userResult.data?.userInfo.user.secUid ?? "", 10);
 if (postsResult.error) {
-  console.error('Error:', postsResult.error);
+  console.error("Error:", postsResult.error);
 } else {
-  console.log('Posts:', postsResult.data);
+  console.log("Posts:", postsResult.data);
 }
 
 // Get challenge/hashtag info
-const challengeResult = await getChallenge('fyp', undefined, 'US');
+const challengeResult = await client.getChallenge("fyp");
 if (challengeResult.error) {
-  console.error('Error:', challengeResult.error);
+  console.error("Error:", challengeResult.error);
 } else {
-  console.log('Challenge:', challengeResult.data);
+  console.log("Challenge:", challengeResult.data);
 }
 ```
 
 ### CommonJS
 
 ```javascript
-const { getUser, getUserPosts, getChallenge } = require('@rediska1114/tiktok-api');
+const { TikTokClient } = require("@ssut/tiktok-api");
 
-// Get user profile
-getUser('username').then(userResult => {
+const client = new TikTokClient({ region: "US" });
+
+client.getUser("username").then((userResult) => {
   if (userResult.error) {
-    console.error('Error:', userResult.error);
-  } else {
-    console.log('User:', userResult.data.userInfo.user);
+    console.error("Error:", userResult.error);
+  } else if (userResult.data) {
+    console.log("User:", userResult.data.userInfo.user);
   }
 });
 ```
 
 ## API
 
-### `getUser(username: string, proxy: string | undefined | null, region: string, msToken?: string)`
+### `new TikTokClient(options)`
 
-Fetches user profile information from TikTok API.
+Create a client with shared Axios instance, proxy, region, and msToken.
 
-**Parameters:**
-- `username` - TikTok username (with or without @)
-- `proxy` - HTTP proxy URL (can be undefined or null)
-- `region` - Region code (e.g., 'GB', 'US', 'FR')
-- `msToken` (optional) - TikTok msToken for request authentication
+**Options:**
 
-**Returns:** `Promise<TiktokStalkUserResponse>`
+- `region` (string, required) - Region code, e.g. `'US'`
+- `proxy` (string | null, optional) - HTTP proxy URL
+- `msToken` (string, optional) - Initial msToken; will rotate automatically
 
-```typescript
-{
-  error?: string;
-  statusCode?: number;
-  data: TiktokUserDetailResponse | null;
-  msToken?: string;
-}
-```
+### `client.getUser(username: string): Promise<TiktokStalkUserResponse>`
 
-### `getUserPosts(secUid: string, proxy: string | undefined | null, postLimit: number | undefined, region: string, msToken?: string)`
+Fetch user profile information.
 
-Fetches user posts with automatic msToken rotation.
+### `client.getUserPosts(secUid: string, postLimit?: number, options?: { nextCursor?: number }): Promise<TiktokUserPostsResponse>`
 
-**Parameters:**
-- `secUid` - User's secure ID (obtained from `getUser`)
-- `proxy` - HTTP proxy URL (can be undefined or null)
-- `postLimit` - Maximum number of posts to fetch (can be undefined)
-- `region` - Region code (e.g., 'GB', 'US', 'FR')
-- `msToken` (optional) - TikTok msToken for request authentication (rotates automatically)
+Fetch user posts with automatic msToken rotation and paginated cursor support (35 on first page, 16 afterwards). Items are returned as-is from the API; duplicates are filtered by `id`.
 
-**Returns:** `Promise<TiktokUserPostsResponse>`
+### `client.getChallenge(hashtag: string): Promise<{ error?: string; statusCode?: number; data: TiktokChallengeResponse | null }>`
 
-```typescript
-{
-  error?: string;
-  statusCode?: number;
-  data: Posts[] | null;
-  totalPosts: number;
-}
-```
-
-### `getChallenge(hashtag: string, proxy: string | undefined | null, region: string, msToken?: string)`
-
-Fetches challenge/hashtag information from TikTok API.
-
-**Parameters:**
-- `hashtag` - Hashtag/challenge name
-- `proxy` - HTTP proxy URL (can be undefined or null)
-- `region` - Region code (e.g., 'GB', 'US', 'FR')
-- `msToken` (optional) - TikTok msToken for request authentication
-
-**Returns:** `Promise<{ error?: string; statusCode?: number; data: TiktokChallengeResponse | null }>`
+Fetch challenge/hashtag details.
 
 ## Features
 
@@ -150,11 +114,13 @@ import type {
   UserProfile,
   StatsUserProfile,
   StatsV2UserProfile,
+  TiktokUserPostsAPIResponse,
   TiktokUserPostsResponse,
+  TiktokPostItem,
   Posts,
   TiktokChallengeResponse,
-  TiktokError
-} from '@rediska1114/tiktok-api';
+  TiktokError,
+} from "@ssut/tiktok-api";
 ```
 
 ## Error Handling
@@ -177,6 +143,7 @@ enum TiktokError {
 ## References
 
 This library uses URL signing techniques based on research from:
+
 - [tiktok-web-reverse-engineering](https://github.com/justbeluga/tiktok-web-reverse-engineering) - X-Bogus and X-Gnarly signature implementation
 
 ## License

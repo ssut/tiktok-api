@@ -24,20 +24,9 @@ export function signUrl(data: SignUrlParams): string {
 
   const timestamp = Math.floor(Date.now() / 1000);
 
-  const xBogus = signBogus(
-    queryString,
-    body,
-    data.userAgent,
-    timestamp
-  );
+  const xBogus = signBogus(queryString, body, data.userAgent, timestamp);
 
-  const xGnarly = signGnarly(
-    queryString,
-    body,
-    data.userAgent,
-    0,
-    '5.1.1'
-  );
+  const xGnarly = signGnarly(queryString, body, data.userAgent, 0, '5.1.1');
 
   return `${data.url}?${queryString}&X-Bogus=${xBogus}&X-Gnarly=${xGnarly}`;
 }

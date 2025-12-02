@@ -4,17 +4,102 @@ import { createHash, randomInt } from 'crypto';
 
 /* ── CONSTANTS ────────────────────────────────────────── */
 const aa = [
-  0xFFFFFFFF, 138, 1498001188, 211147047, 253, null, 203, 288, 9,
-  1196819126, 3212677781, 135, 263, 193, 58, 18, 244, 2931180889, 240, 173,
-  268, 2157053261, 261, 175, 14, 5, 171, 270, 156, 258, 13, 15, 3732962506,
-  185, 169, 2, 6, 132, 162, 200, 3, 160, 217618912, 62, 2517678443, 44, 164,
-  4, 96, 183, 2903579748, 3863347763, 119, 181, 10, 190, 8, 2654435769, 259,
-  104, 230, 128, 2633865432, 225, 1, 257, 143, 179, 16, 600974999, 185100057,
-  32, 188, 53, 2718276124, 177, 196, 4294967296, 147, 117, 17, 49, 7, 28, 12,
-  266, 216, 11, 0, 45, 166, 247, 1451689750,
+  0xffffffff,
+  138,
+  1498001188,
+  211147047,
+  253,
+  null,
+  203,
+  288,
+  9,
+  1196819126,
+  3212677781,
+  135,
+  263,
+  193,
+  58,
+  18,
+  244,
+  2931180889,
+  240,
+  173,
+  268,
+  2157053261,
+  261,
+  175,
+  14,
+  5,
+  171,
+  270,
+  156,
+  258,
+  13,
+  15,
+  3732962506,
+  185,
+  169,
+  2,
+  6,
+  132,
+  162,
+  200,
+  3,
+  160,
+  217618912,
+  62,
+  2517678443,
+  44,
+  164,
+  4,
+  96,
+  183,
+  2903579748,
+  3863347763,
+  119,
+  181,
+  10,
+  190,
+  8,
+  2654435769,
+  259,
+  104,
+  230,
+  128,
+  2633865432,
+  225,
+  1,
+  257,
+  143,
+  179,
+  16,
+  600974999,
+  185100057,
+  32,
+  188,
+  53,
+  2718276124,
+  177,
+  196,
+  4294967296,
+  147,
+  117,
+  17,
+  49,
+  7,
+  28,
+  12,
+  266,
+  216,
+  11,
+  0,
+  45,
+  166,
+  247,
+  1451689750,
 ];
-const Ot = [aa[9]!, aa[69]!, aa[51]!, aa[92]!];   // constants prepended to ChaCha key
-const MASK32 = 0xFFFFFFFF;
+const Ot = [aa[9]!, aa[69]!, aa[51]!, aa[92]!]; // constants prepended to ChaCha key
+const MASK32 = 0xffffffff;
 
 /* ── PRNG INITIAL STATE (faithful clone of JS impl) ───── */
 function initPrngState() {
@@ -38,53 +123,68 @@ function initPrngState() {
     randomInt(aa[77]!),
   ];
 }
-let kt = initPrngState();           // 16-word ChaCha state (global)
-let St = aa[88]!;                    // position pointer (starts at 0)
+const kt = initPrngState(); // 16-word ChaCha state (global)
+let St = aa[88]!; // position pointer (starts at 0)
 
 /* ── BIT-TWIDDLING HELPERS ────────────────────────────── */
-const u32  = (x: number) => (x >>> 0);
+const u32 = (x: number) => x >>> 0;
 const rotl = (x: number, n: number) => u32((x << n) | (x >>> (32 - n)));
 
 /* ── CHACHA CORE ───────────────────────────────────────── */
 function quarter(st: number[], a: number, b: number, c: number, d: number) {
-  st[a] = u32(st[a] + st[b]);   st[d] = rotl(st[d] ^ st[a], 16);
-  st[c] = u32(st[c] + st[d]);   st[b] = rotl(st[b] ^ st[c], 12);
-  st[a] = u32(st[a] + st[b]);   st[d] = rotl(st[d] ^ st[a],  8);
-  st[c] = u32(st[c] + st[d]);   st[b] = rotl(st[b] ^ st[c],  7);
+  st[a] = u32(st[a] + st[b]);
+  st[d] = rotl(st[d] ^ st[a], 16);
+  st[c] = u32(st[c] + st[d]);
+  st[b] = rotl(st[b] ^ st[c], 12);
+  st[a] = u32(st[a] + st[b]);
+  st[d] = rotl(st[d] ^ st[a], 8);
+  st[c] = u32(st[c] + st[d]);
+  st[b] = rotl(st[b] ^ st[c], 7);
 }
 
 function chachaBlock(state: number[], rounds: number) {
-  const w = state.slice();   // working copy
+  const w = state.slice(); // working copy
   for (let r = 0; r < rounds; ) {
     // column round
-    quarter(w, 0, 4,  8, 12); quarter(w, 1, 5,  9, 13);
-    quarter(w, 2, 6, 10, 14); quarter(w, 3, 7, 11, 15);
+    quarter(w, 0, 4, 8, 12);
+    quarter(w, 1, 5, 9, 13);
+    quarter(w, 2, 6, 10, 14);
+    quarter(w, 3, 7, 11, 15);
     if (++r >= rounds) break;
     // diagonal round
-    quarter(w, 0, 5, 10, 15); quarter(w, 1, 6, 11, 12);
-    quarter(w, 2, 7, 12, 13); quarter(w, 3, 4, 13, 14);
+    quarter(w, 0, 5, 10, 15);
+    quarter(w, 1, 6, 11, 12);
+    quarter(w, 2, 7, 12, 13);
+    quarter(w, 3, 4, 13, 14);
     ++r;
   }
   for (let i = 0; i < 16; i++) w[i] = u32(w[i] + state[i]);
   return w;
 }
 
-const bumpCounter = (st: number[]) => { st[12] = u32(st[12] + 1); };
+const bumpCounter = (st: number[]) => {
+  st[12] = u32(st[12] + 1);
+};
 
 /* ── JS-faithful PRNG (rand) ───────────────────────────── */
 function rand() {
-  const e = chachaBlock(kt, 8);           // 8 double-rounds
+  const e = chachaBlock(kt, 8); // 8 double-rounds
   const t = e[St];
-  const r = (e[St + 8] & 0xFFFFFFF0) >>> 11;
-  if (St === 7) { bumpCounter(kt); St = 0; } else { ++St; }
+  const r = (e[St + 8] & 0xfffffff0) >>> 11;
+  if (St === 7) {
+    bumpCounter(kt);
+    St = 0;
+  } else {
+    ++St;
+  }
   return (t + 4294967296 * r) / 2 ** 53;
 }
 
 /* ── UTILITIES ─────────────────────────────────────────── */
 const numToBytes = (val: number) =>
   val < 255 * 255
-    ? [(val >> 8) & 0xFF, val & 0xFF]
-    : [(val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF];
+    ? [(val >> 8) & 0xff, val & 0xff]
+    : [(val >> 24) & 0xff, (val >> 16) & 0xff, (val >> 8) & 0xff, val & 0xff];
 
 const beIntFromStr = (str: string) => {
   const buf = Buffer.from(str, 'utf8').subarray(0, 4);
@@ -109,7 +209,8 @@ function encryptChaCha(keyWords: number[], rounds: number, bytes: number[]) {
       (bytes[j + 3] << 24);
   }
   if (leftover) {
-    let v = 0, base = 4 * nFull;
+    let v = 0,
+      base = 4 * nFull;
     for (let c = 0; c < leftover; c++) v |= bytes[base + c] << (8 * c);
     words[nFull] = v;
   }
@@ -131,22 +232,22 @@ function encryptChaCha(keyWords: number[], rounds: number, bytes: number[]) {
   for (let i = 0; i < nFull; i++) {
     const w = words[i];
     const j = 4 * i;
-    bytes[j]     =  w         & 0xFF;
-    bytes[j + 1] = (w >> 8)   & 0xFF;
-    bytes[j + 2] = (w >> 16)  & 0xFF;
-    bytes[j + 3] = (w >> 24)  & 0xFF;
+    bytes[j] = w & 0xff;
+    bytes[j + 1] = (w >> 8) & 0xff;
+    bytes[j + 2] = (w >> 16) & 0xff;
+    bytes[j + 3] = (w >> 24) & 0xff;
   }
   if (leftover) {
     const w = words[nFull];
     const base = 4 * nFull;
-    for (let c = 0; c < leftover; c++) bytes[base + c] = (w >> (8 * c)) & 0xFF;
+    for (let c = 0; c < leftover; c++) bytes[base + c] = (w >> (8 * c)) & 0xff;
   }
 }
 
 /* ── Ab22 helper: prepend Ot, encrypt, return string ──── */
 function Ab22(key12Words: number[], rounds: number, str: string) {
-  const state = Ot.concat(key12Words);       // 16-word state
-  const data = Array.from(str, ch => ch.charCodeAt(0));
+  const state = Ot.concat(key12Words); // 16-word state
+  const data = Array.from(str, (ch) => ch.charCodeAt(0));
   encryptChaCha(state, rounds, data);
   return String.fromCharCode(...data);
 }
@@ -167,7 +268,7 @@ function encrypt(
   userAgent: string,
   envcode: number = 0,
   version: '5.1.0' | '5.1.1' = '5.1.1',
-  timestampMs: number = Date.now()
+  timestampMs: number = Date.now(),
 ): string {
   /* build the obj map with insertion order intact */
   const obj = new Map<number, string | number>();
@@ -205,11 +306,13 @@ function encrypt(
 
   /* serialize payload */
   const payload: number[] = [];
-  payload.push(obj.size);           // count byte
+  payload.push(obj.size); // count byte
   for (const [k, v] of obj) {
     payload.push(k);
     const valBytes =
-      typeof v === 'number' ? numToBytes(v) : Array.from(Buffer.from(v, 'utf8'));
+      typeof v === 'number'
+        ? numToBytes(v)
+        : Array.from(Buffer.from(v, 'utf8'));
     payload.push(...numToBytes(valBytes.length));
     payload.push(...valBytes);
   }
@@ -221,13 +324,15 @@ function encrypt(
   let roundAccum = 0;
   for (let i = 0; i < 12; i++) {
     const rnd = rand();
-    const word = (rnd * 4294967296) >>> 0;         // 2^32 * rnd
+    const word = (rnd * 4294967296) >>> 0; // 2^32 * rnd
     keyWords.push(word);
     roundAccum = (roundAccum + (word & 15)) & 15;
-    keyBytes.push(word & 0xFF,
-                  (word >>> 8) & 0xFF,
-                  (word >>> 16) & 0xFF,
-                  (word >>> 24) & 0xFF);           // little-endian
+    keyBytes.push(
+      word & 0xff,
+      (word >>> 8) & 0xff,
+      (word >>> 16) & 0xff,
+      (word >>> 24) & 0xff,
+    ); // little-endian
   }
   const rounds = roundAccum + 5;
 
@@ -237,17 +342,19 @@ function encrypt(
   /* splice keyBytes into enc at computed insertPos */
   let insertPos = 0;
   for (const b of keyBytes) insertPos = (insertPos + b) % (enc.length + 1);
-  for (const ch of enc) insertPos = (insertPos + ch.charCodeAt(0)) % (enc.length + 1);
+  for (const ch of enc)
+    insertPos = (insertPos + ch.charCodeAt(0)) % (enc.length + 1);
 
   const keyBytesStr = String.fromCharCode(...keyBytes);
   const finalStr =
-    String.fromCharCode(((1 << 6) ^ (1 << 3) ^ 3) & 0xFF) +   // constant 'K'
+    String.fromCharCode(((1 << 6) ^ (1 << 3) ^ 3) & 0xff) + // constant 'K'
     enc.slice(0, insertPos) +
     keyBytesStr +
     enc.slice(insertPos);
 
   /* custom alphabet Base-64 */
-  const alphabet = 'u09tbS3UvgDEe6r-ZVMXzLpsAohTn7mdINQlW412GqBjfYiyk8JORCF5/xKHwacP=';
+  const alphabet =
+    'u09tbS3UvgDEe6r-ZVMXzLpsAohTn7mdINQlW412GqBjfYiyk8JORCF5/xKHwacP=';
   const out: string[] = [];
   const fullLen = Math.floor(finalStr.length / 3) * 3;
   for (let i = 0; i < fullLen; i += 3) {
@@ -255,10 +362,12 @@ function encrypt(
       (finalStr.charCodeAt(i) << 16) |
       (finalStr.charCodeAt(i + 1) << 8) |
       finalStr.charCodeAt(i + 2);
-    out.push(alphabet[(block >> 18) & 63],
-              alphabet[(block >> 12) & 63],
-              alphabet[(block >>  6) & 63],
-              alphabet[ block        & 63]);
+    out.push(
+      alphabet[(block >> 18) & 63],
+      alphabet[(block >> 12) & 63],
+      alphabet[(block >> 6) & 63],
+      alphabet[block & 63],
+    );
   }
   return out.join('');
 }
