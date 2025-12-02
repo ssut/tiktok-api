@@ -1,6 +1,6 @@
 {
   "name": "@ssut/tiktok-api",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "TikTok API library for fetching user profiles, posts, and challenges",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
