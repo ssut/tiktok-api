@@ -64,10 +64,17 @@ export interface TiktokPostItem {
   textLanguage: string;
   textTranslatable: boolean;
   video: Video;
+  imagePost?: ImagePost;
   aigcLabelType?: number;
   moderationAigcLabelType?: number;
   anchors?: Anchor[];
   videoSuggestWordsList?: VideoSuggestWordsList;
+  event?: {
+    event_id: string;
+    event_start_time: number;
+    has_subscribed: false;
+    title: string;
+  };
 }
 
 export interface Anchor {
@@ -323,6 +330,21 @@ export interface VideoSuggestWordsStruct {
 export interface VideoSuggestWord {
   word: string;
   word_id: string;
+}
+
+export interface ImagePost {
+  cover: ImageAsset;
+  images: ImageAsset[];
+  shareCover?: ImageAsset;
+  title: string;
+}
+
+export interface ImageAsset {
+  imageHeight: number;
+  imageWidth: number;
+  imageURL: {
+    urlList: string[];
+  };
 }
 
 // Backward compatible alias for previous "Posts" type

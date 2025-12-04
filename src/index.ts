@@ -7,6 +7,10 @@ export type {
   TiktokPostCommentsResponse,
 } from './api/getPostComments/types';
 export type {
+  TiktokPostDetailAPIResponse,
+  TiktokPostResponse,
+} from './api/getPost/types';
+export type {
   StatsUserProfile,
   StatsV2UserProfile,
   TiktokStalkUserResponse,

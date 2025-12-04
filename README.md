@@ -55,6 +55,14 @@ if (commentsResult.error) {
   console.log("Next cursor:", commentsResult.cursor);
 }
 
+// Get a single post by itemId (awemeId)
+const postResult = await client.getPost("7517479623240781063");
+if (postResult.error) {
+  console.error("Post error:", postResult.error);
+} else {
+  console.log("Post description:", postResult.data?.desc);
+}
+
 // Get replies for a specific comment
 const repliesResult = await client.getCommentReplies("7574735526134058262", commentsResult.data?.[0]?.cid ?? "", 10);
 if (repliesResult.error) {
@@ -107,6 +115,10 @@ Fetch user profile information.
 ### `client.getUserPosts(secUid: string, options?: { postLimit?: number; nextCursor?: number; requestType?: PostItemRequestType }): Promise<TiktokUserPostsResponse>`
 
 Fetch user posts with automatic msToken rotation and paginated cursor support (35 on first page, 16 afterwards). Items are returned as-is from the API; duplicates are filtered by `id`. Use `requestType` to control ordering: `Latest` (0), `Popular` (1), or `Oldest` (2).
+
+### `client.getPost(itemId: string): Promise<TiktokPostResponse>`
+
+Fetch a single post (item detail) by `itemId`/`awemeId`. Returns the raw `itemStruct` from TikTok when available.
 
 ### `client.getPostComments(awemeId: string, count = 20, options?: { cursor?: number }): Promise<TiktokPostCommentsResponse>`
 

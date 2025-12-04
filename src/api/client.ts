@@ -8,6 +8,11 @@ import { extractMsToken } from '../utils/helpers';
 import { signUrl } from '../utils/signUrl';
 import { getChallengeParams } from './getChallenge/params';
 import type { TiktokChallengeResponse } from './getChallenge/types';
+import { getPostParams } from './getPost/params';
+import type {
+  TiktokPostDetailAPIResponse,
+  TiktokPostResponse,
+} from './getPost/types';
 import {
   getCommentRepliesParams,
   getPostCommentsParams,
@@ -193,6 +198,58 @@ export class TikTokClient {
   }
 
   /**
+   * Fetch a single post by itemId.
+   * @param itemId - awemeId
+   */
+  public async getPost(itemId: string): Promise<TiktokPostResponse> {
+    try {
+      const data = await this.fetchPost(itemId);
+      const statusCode = data?.statusCode ?? data?.status_code ?? 0;
+      const item = data?.itemInfo?.itemStruct;
+
+      if (!item) {
+        return {
+          error: 'VIDEO_NOT_FOUND',
+          statusCode,
+          data: null,
+        };
+      }
+
+      return {
+        data: item,
+        statusCode,
+      };
+    } catch (err: any) {
+      if (
+        err.status === 400 ||
+        (err.response?.data &&
+          (err.response.data.statusCode === TiktokError.INVALID_ENTITY ||
+            err.response.data.status_code === TiktokError.INVALID_ENTITY))
+      ) {
+        return {
+          error: 'INVALID_ENTITY',
+          statusCode: TiktokError.INVALID_ENTITY,
+          data: null,
+        };
+      }
+
+      if (err.message === 'EMPTY_RESPONSE') {
+        return {
+          error: 'EMPTY_RESPONSE',
+          statusCode: 0,
+          data: null,
+        };
+      }
+
+      return {
+        error: 'UNKNOWN_ERROR',
+        statusCode: 0,
+        data: null,
+      };
+    }
+  }
+
+  /**
    * Fetch user posts with pagination.
    */
   public async getUserPosts(
@@ -208,7 +265,7 @@ export class TikTokClient {
       const seenIds = new Set<string>();
       let hasMore = true;
       let cursor = options?.nextCursor ?? 0;
-      const postLimit = options?.postLimit;
+      const postLimit = options?.postLimit ?? 35;
       let isFirstPage = cursor === 0;
       let lastCursor: string | undefined;
 
@@ -223,7 +280,9 @@ export class TikTokClient {
 
         const list = pageResult?.itemList ?? [];
         for (const item of list) {
-          if (seenIds.has(item.id)) continue;
+          if (seenIds.has(item.id)) {
+            continue;
+          }
           posts.push(item);
           seenIds.add(item.id);
         }
@@ -587,6 +646,53 @@ export class TikTokClient {
         if (
           error.response?.status === 400 ||
           error.response?.data?.statusCode === TiktokError.INVALID_ENTITY
+        ) {
+          const invalidError: any = new Error('INVALID_ENTITY');
+          invalidError.status = 400;
+          bail(invalidError);
+          return null;
+        }
+        throw error;
+      }
+    }, RETRY_OPTIONS);
+  }
+
+  private async fetchPost(
+    itemId: string,
+  ): Promise<TiktokPostDetailAPIResponse | null> {
+    return retry(async (bail) => {
+      try {
+        const params = getPostParams({
+          userAgent: USER_AGENT,
+          region: this.region,
+          itemId,
+          msToken: this.msToken,
+        });
+
+        const signedUrl = signUrl({
+          url: `${TIKTOK_URL}/api/item/detail/`,
+          params,
+          userAgent: USER_AGENT,
+        });
+
+        const { data, headers } =
+          await this.axios.get<TiktokPostDetailAPIResponse>(signedUrl);
+
+        const newMsToken = headers['x-ms-token'] as string | undefined;
+        if (newMsToken) {
+          this.msToken = newMsToken;
+        }
+
+        if (!data || (typeof data === 'string' && data === '')) {
+          throw new Error('EMPTY_RESPONSE');
+        }
+
+        return data;
+      } catch (error: any) {
+        if (
+          error.response?.status === 400 ||
+          error.response?.data?.statusCode === TiktokError.INVALID_ENTITY ||
+          error.response?.data?.status_code === TiktokError.INVALID_ENTITY
         ) {
           const invalidError: any = new Error('INVALID_ENTITY');
           invalidError.status = 400;
