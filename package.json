@@ -1,7 +1,7 @@
 {
   "name": "@ssut/tiktok-api",
-  "version": "1.3.0",
-  "description": "TikTok API library for fetching user profiles, posts, and challenges",
+  "version": "1.4.0",
+  "description": "Fully-typed TikTok web API client that REALLY works—handles URL signing, msToken rotation, retries, and helpers for profiles, posts, and challenges",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
