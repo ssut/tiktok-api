@@ -36,14 +36,36 @@ if (userResult.error) {
 }
 
 // Get user posts (pass msToken automatically managed by the client)
-const postsResult = await client.getUserPosts(
-  userResult.data?.userInfo.user.secUid ?? "",
-  { postLimit: 10, requestType: PostItemRequestType.Popular },
-);
+const postsResult = await client.getUserPosts(userResult.data?.userInfo.user.secUid ?? "", {
+  postLimit: 10,
+  requestType: PostItemRequestType.Popular,
+});
 if (postsResult.error) {
   console.error("Error:", postsResult.error);
 } else {
   console.log("Posts:", postsResult.data);
+}
+
+// Get user followers (first page by default)
+const followersResult = await client.getUserFollowers(userResult.data?.userInfo.user.secUid ?? "", {
+  followerLimit: 30,
+});
+if (followersResult.error) {
+  console.error("Followers error:", followersResult.error);
+} else {
+  console.log("Followers:", followersResult.data?.length);
+  console.log("Next cursor:", followersResult.cursor);
+}
+
+// Get user following (users that the profile follows)
+const followingResult = await client.getUserFollowing(userResult.data?.userInfo.user.secUid ?? "", {
+  followingLimit: 30,
+});
+if (followingResult.error) {
+  console.error("Following error:", followingResult.error);
+} else {
+  console.log("Following:", followingResult.data?.length);
+  console.log("Next cursor:", followingResult.cursor);
 }
 
 // Get comments for a post
@@ -116,6 +138,14 @@ Fetch user profile information.
 
 Fetch user posts with automatic msToken rotation and paginated cursor support (35 on first page, 16 afterwards). Items are returned as-is from the API; duplicates are filtered by `id`. Use `requestType` to control ordering: `Latest` (0), `Popular` (1), or `Oldest` (2).
 
+### `client.getUserFollowers(secUid: string, options?: { followerLimit?: number; count?: number; cursor?: number }): Promise<TiktokUserFollowersResponse>`
+
+Fetch followers for a user by `secUid`. Returns followers with pagination via `cursor`; defaults to the first page (`count` defaults to 30). `followerLimit` caps the total number fetched when auto-paginating.
+
+### `client.getUserFollowing(secUid: string, options?: { followingLimit?: number; count?: number; cursor?: number }): Promise<TiktokUserFollowingResponse>`
+
+Fetch the list of accounts the user follows. Pagination works the same as `getUserFollowers`; `followingLimit` caps the total fetched when auto-paginating.
+
 ### `client.getPost(itemId: string): Promise<TiktokPostResponse>`
 
 Fetch a single post (item detail) by `itemId`/`awemeId`. Returns the raw `itemStruct` from TikTok when available.
@@ -154,6 +184,10 @@ import type {
   UserProfile,
   StatsUserProfile,
   StatsV2UserProfile,
+  TiktokUserFollowersAPIResponse,
+  TiktokUserFollowersResponse,
+  TiktokUserFollower,
+  TiktokUserFollowingResponse,
   TiktokUserPostsAPIResponse,
   TiktokUserPostsResponse,
   TiktokPostItem,
