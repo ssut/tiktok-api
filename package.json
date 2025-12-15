@@ -1,6 +1,6 @@
 {
   "name": "@ssut/tiktok-api",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Fully-typed TikTok web API client that REALLY works—handles URL signing, msToken rotation, retries, and helpers for profiles, posts, and challenges",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",

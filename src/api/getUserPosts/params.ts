@@ -52,8 +52,7 @@ export const getUserPostsParams = ({
     odinId: generateOdinId(),
     os: 'mac',
     priority_region: '',
-    post_item_list_request_type:
-      requestType ?? PostItemRequestType.Latest,
+    post_item_list_request_type: requestType ?? PostItemRequestType.Latest,
     referer: '',
     region: region ?? 'GB',
     screen_height: 1440,

@@ -6,6 +6,19 @@ import { RETRY_OPTIONS } from '../constants/retry';
 import { TIKTOK_URL, USER_AGENT } from '../constants/urls';
 import { extractMsToken } from '../utils/helpers';
 import { signUrl } from '../utils/signUrl';
+import { buildTiktokApiParams } from './downloadVideo/params';
+import type {
+  TiktokAPIResponse,
+  TiktokAuthor,
+  TiktokAwemeItem,
+  TiktokDownloadResponse,
+  TiktokImageResult,
+  TiktokMusic,
+  TiktokStatistics,
+  TiktokVideo,
+  TiktokVideoFormat,
+  TiktokVideoResult,
+} from './downloadVideo/types';
 import { getChallengeParams } from './getChallenge/params';
 import type { TiktokChallengeResponse } from './getChallenge/types';
 import { getPostParams } from './getPost/params';
@@ -47,6 +60,7 @@ type ClientOptions = {
   region: string;
   msToken?: string;
   retryOptions?: RetryOptions;
+  tiktokApiHost?: string;
 };
 
 type RequestOverrides = {
@@ -64,11 +78,14 @@ export class TikTokClient {
   private readonly region: string;
   private readonly defaultHttpsAgent?: HttpsProxyAgent<string>;
   private readonly retryOptions: RetryOptions;
+  private readonly tiktokApiHost: string;
   private msToken?: string;
 
   constructor(options: ClientOptions) {
     this.region = options.region;
     this.msToken = options.msToken;
+    this.tiktokApiHost =
+      options.tiktokApiHost || 'api16-normal-c-useast1a.tiktokv.com';
 
     this.defaultHttpsAgent = options.proxy
       ? new HttpsProxyAgent(options.proxy)
@@ -751,6 +768,103 @@ export class TikTokClient {
   }
 
   /**
+   * Download TikTok video/image content by URL (v1 API method)
+   * @param url - TikTok URL
+   * @param showOriginalResponse - Return unparsed response
+   * @param overrides - Optional request overrides (proxy, region, etc.)
+   */
+  public async downloadVideo(
+    url: string,
+    showOriginalResponse?: boolean,
+    overrides?: RequestOverrides,
+  ): Promise<TiktokDownloadResponse> {
+    const TIKTOK_URL_REGEX =
+      /https:\/\/(?:m|t|www|vm|vt|lite)?\.?tiktok\.com\/((?:.*\b(?:(?:usr|v|embed|user|video|photo)\/|\?shareId=|&item_id=)(\d+))|\w+)/;
+    const DL_USER_AGENT =
+      'com.zhiliaoapp.musically/35.1.3 (Linux; U; Android 13; en_US; Pixel 7; Build/TD1A.220804.031; Cronet/58.0.2991.0)';
+
+    try {
+      // Validate URL
+      if (!TIKTOK_URL_REGEX.test(url)) {
+        return {
+          status: 'error',
+          message: 'Invalid TikTok URL',
+        };
+      }
+
+      // Normalize URL
+      const normalizedUrl = url.replace('https://vm', 'https://vt');
+
+      // Get video ID by following redirects
+      const axiosConfig = this.buildAxiosConfig(overrides);
+      const request = await this.axios(normalizedUrl, {
+        ...axiosConfig,
+        method: 'GET',
+        maxRedirects: 0,
+        headers: {
+          'User-Agent': DL_USER_AGENT,
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        validateStatus: (status: number) => status >= 200 && status < 400,
+      });
+
+      const redirectUrl =
+        request.headers.location ?? request.request?.res?.responseUrl ?? url;
+
+      const matches = redirectUrl.match(/\d{17,21}/g);
+      const videoId = matches ? matches[0] : null;
+
+      if (!videoId) {
+        return {
+          status: 'error',
+          message: 'Could not extract video ID from URL',
+        };
+      }
+
+      // Fetch TikTok data from v1 API
+      const data = await this.fetchTiktokVideoData(
+        videoId,
+        DL_USER_AGENT,
+        overrides,
+      );
+      if (!data) {
+        return {
+          status: 'error',
+          message: 'Failed to fetch TikTok data',
+        };
+      }
+
+      const { content, author, statistics, music, formats } = data;
+
+      // Return original response if requested
+      if (showOriginalResponse) {
+        return {
+          status: 'success',
+          resultNotParsed: data,
+        };
+      }
+
+      // Create response based on content type (image or video)
+      const result = content.image_post_info
+        ? this.createImageResponse(content, author, statistics, music)
+        : this.createVideoResponse(content, author, statistics, music, formats);
+
+      return {
+        status: 'success',
+        result,
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        message:
+          error instanceof Error ? error.message : 'An unknown error occurred',
+      };
+    }
+  }
+
+  /**
    * Fetch replies for a specific comment under a post.
    */
   public async getCommentReplies(
@@ -1136,6 +1250,408 @@ export class TikTokClient {
         throw error;
       }
     }, retryOptions);
+  }
+
+  private async fetchTiktokVideoData(
+    videoId: string,
+    userAgent: string,
+    overrides?: RequestOverrides,
+  ): Promise<{
+    content: TiktokAwemeItem;
+    statistics: TiktokStatistics;
+    author: TiktokAuthor;
+    music: TiktokMusic;
+    formats?: TiktokVideoFormat[];
+  } | null> {
+    const params = buildTiktokApiParams(videoId);
+    const feedUrl = `https://${this.tiktokApiHost}/aweme/v1/feed/?${params}`;
+
+    try {
+      const response = await retry<TiktokAPIResponse>(
+        async () => {
+          const axiosConfig = this.buildAxiosConfig(overrides);
+          const res = await this.axios<TiktokAPIResponse>(feedUrl, {
+            ...axiosConfig,
+            method: 'OPTIONS',
+            headers: { 'User-Agent': userAgent },
+          });
+
+          if (res.data && res.data.status_code === 0) {
+            return res.data;
+          }
+
+          throw new Error('Failed to fetch TikTok data');
+        },
+        {
+          retries: 10,
+          minTimeout: 200,
+          maxTimeout: 1000,
+        },
+      );
+
+      // Find the matching video in the response
+      const content = response?.aweme_list?.find((v) => v.aweme_id === videoId);
+
+      if (!content) {
+        return null;
+      }
+
+      // Parse statistics with error handling
+      let statistics: TiktokStatistics;
+      try {
+        statistics = {
+          commentCount: content.statistics?.comment_count || 0,
+          likeCount: content.statistics?.digg_count || 0,
+          shareCount: content.statistics?.share_count || 0,
+          playCount: content.statistics?.play_count || 0,
+          downloadCount: content.statistics?.download_count || 0,
+        };
+      } catch {
+        statistics = {
+          commentCount: 0,
+          likeCount: 0,
+          shareCount: 0,
+          playCount: 0,
+          downloadCount: 0,
+        };
+      }
+
+      // Parse author with error handling
+      let author: TiktokAuthor;
+      try {
+        author = {
+          uid: content.author?.uid || '',
+          username: content.author?.unique_id || '',
+          uniqueId: content.author?.unique_id || '',
+          nickname: content.author?.nickname || '',
+          signature: content.author?.signature || '',
+          region: content.author?.region || '',
+          avatarThumb: content.author?.avatar_thumb?.url_list || [],
+          avatarMedium: content.author?.avatar_medium?.url_list || [],
+          url: content.author?.unique_id
+            ? `https://www.tiktok.com/@${content.author.unique_id}`
+            : '',
+        };
+      } catch {
+        author = {
+          uid: '',
+          username: '',
+          uniqueId: '',
+          nickname: '',
+          signature: '',
+          region: '',
+          avatarThumb: [],
+          avatarMedium: [],
+          url: '',
+        };
+      }
+
+      // Parse music with error handling
+      let music: TiktokMusic;
+      try {
+        music = {
+          id: String(content.music?.id || ''),
+          title: content.music?.title || '',
+          author: content.music?.author || '',
+          album: content.music?.album || '',
+          playUrl: content.music?.play_url?.url_list || [],
+          coverLarge: content.music?.cover_large?.url_list || [],
+          coverMedium: content.music?.cover_medium?.url_list || [],
+          coverThumb: content.music?.cover_thumb?.url_list || [],
+          duration: content.music?.duration || 0,
+          isCommerceMusic: content.music?.is_commerce_music || false,
+          isOriginalSound: content.music?.is_original_sound || false,
+          isAuthorArtist: content.music?.is_author_artist || false,
+        };
+      } catch {
+        music = {
+          id: '',
+          title: '',
+          author: '',
+          album: '',
+          playUrl: [],
+          coverLarge: [],
+          coverMedium: [],
+          coverThumb: [],
+          duration: 0,
+          isCommerceMusic: false,
+          isOriginalSound: false,
+          isAuthorArtist: false,
+        };
+      }
+
+      // Extract video formats with resolution detection
+      const formats = this.extractVideoFormats(content);
+
+      return {
+        content,
+        statistics,
+        author,
+        music,
+        formats,
+      };
+    } catch (error) {
+      console.error('Error fetching TikTok data:', error);
+      return null;
+    }
+  }
+
+  private extractVideoFormats(content: TiktokAwemeItem): TiktokVideoFormat[] {
+    const formats: TiktokVideoFormat[] = [];
+
+    try {
+      const video = content.video;
+      if (!video) return formats;
+
+      const width = video.width || 0;
+      const height = video.height || 0;
+      const ratio = width && height ? width / height : 0.5625;
+
+      // Helper to determine resolution string
+      const getResolution = (w?: number, h?: number): string => {
+        if (!h) return '';
+        if (h >= 2160) return '4K';
+        if (h >= 1440) return '1440p';
+        if (h >= 1080) return '1080p';
+        if (h >= 720) return '720p';
+        if (h >= 540) return '540p';
+        if (h >= 480) return '480p';
+        if (h >= 360) return '360p';
+        return `${h}p`;
+      };
+
+      // Extract play_addr (direct video)
+      if (video.play_addr?.url_list?.length) {
+        const isH265 = video.is_bytevc1 || video.is_h265;
+        formats.push({
+          url: video.play_addr.url_list[0],
+          format_id: 'play_addr',
+          format_note: 'Direct video',
+          width,
+          height,
+          resolution: getResolution(width, height),
+          vcodec: isH265 ? 'h265' : 'h264',
+          acodec: 'aac',
+          filesize: video.play_addr.data_size,
+          quality: 'high',
+        });
+      }
+
+      // Extract download_addr (watermarked)
+      if (video.download_addr?.url_list?.length) {
+        const dlWidth = video.download_addr.width || width;
+        const dlHeight =
+          dlWidth && ratio ? Math.round(dlWidth / ratio) : height;
+        formats.push({
+          url: video.download_addr.url_list[0],
+          format_id: 'download_addr',
+          format_note: 'Download video (watermarked)',
+          width: dlWidth,
+          height: dlHeight,
+          resolution: getResolution(dlWidth, dlHeight),
+          vcodec: 'h264',
+          acodec: 'aac',
+          filesize: video.download_addr.data_size,
+          has_watermark: true,
+          quality: 'medium',
+        });
+      }
+
+      // Extract play_addr_h264 if available
+      if (video.play_addr_h264?.url_list?.length) {
+        formats.push({
+          url: video.play_addr_h264.url_list[0],
+          format_id: 'play_addr_h264',
+          format_note: 'H264 video',
+          width: video.play_addr_h264.width || width,
+          height: video.play_addr_h264.height || height,
+          resolution: getResolution(
+            video.play_addr_h264.width || width,
+            video.play_addr_h264.height || height,
+          ),
+          vcodec: 'h264',
+          acodec: 'aac',
+          filesize: video.play_addr_h264.data_size,
+          quality: 'high',
+        });
+      }
+
+      // Extract play_addr_bytevc1 if available (H265)
+      if (video.play_addr_bytevc1?.url_list?.length) {
+        formats.push({
+          url: video.play_addr_bytevc1.url_list[0],
+          format_id: 'play_addr_bytevc1',
+          format_note: 'H265 video',
+          width: video.play_addr_bytevc1.width || width,
+          height: video.play_addr_bytevc1.height || height,
+          resolution: getResolution(
+            video.play_addr_bytevc1.width || width,
+            video.play_addr_bytevc1.height || height,
+          ),
+          vcodec: 'h265',
+          acodec: 'aac',
+          filesize: video.play_addr_bytevc1.data_size,
+          quality: 'high',
+        });
+      }
+
+      // Extract bit_rate variations (different quality levels)
+      if (Array.isArray(video.bit_rate)) {
+        for (const bitrate of video.bit_rate) {
+          if (bitrate.play_addr?.url_list?.length) {
+            const brWidth = bitrate.play_addr.width || width;
+            const brHeight = bitrate.play_addr.height || height;
+            const isH265 = bitrate.is_bytevc1 || bitrate.is_h265;
+
+            formats.push({
+              url: bitrate.play_addr.url_list[0],
+              format_id: bitrate.gear_name || `bitrate_${bitrate.bit_rate}`,
+              format_note: `${bitrate.gear_name || 'Bitrate'} video`,
+              width: brWidth,
+              height: brHeight,
+              resolution: getResolution(brWidth, brHeight),
+              vcodec: isH265 ? 'h265' : 'h264',
+              acodec: 'aac',
+              bitrate: bitrate.bit_rate,
+              fps: bitrate.FPS,
+              filesize: bitrate.play_addr.data_size,
+              quality: bitrate.quality_type || 'normal',
+            });
+          }
+        }
+      }
+
+      // Sort formats by quality (higher resolution first)
+      formats.sort((a, b) => {
+        const heightA = a.height || 0;
+        const heightB = b.height || 0;
+        if (heightA !== heightB) return heightB - heightA;
+
+        // If same height, prefer non-watermarked
+        if (a.has_watermark !== b.has_watermark) {
+          return a.has_watermark ? 1 : -1;
+        }
+
+        return 0;
+      });
+    } catch (error) {
+      console.error('Error extracting video formats:', error);
+    }
+
+    return formats;
+  }
+
+  private createImageResponse(
+    content: TiktokAwemeItem,
+    author: TiktokAuthor,
+    statistics: TiktokStatistics,
+    music: TiktokMusic,
+  ): TiktokImageResult {
+    try {
+      return {
+        type: 'image',
+        id: content.aweme_id || '',
+        createTime: content.create_time || 0,
+        desc: content.desc || '',
+        isTurnOffComment: content.item_comment_settings === 3,
+        hashtag: Array.isArray(content.text_extra)
+          ? content.text_extra
+              .filter((x: any) => x?.hashtag_name !== undefined)
+              .map((v: any) => v.hashtag_name)
+          : [],
+        isADS: content.is_ads || false,
+        author,
+        statistics,
+        images: Array.isArray(content.image_post_info?.images)
+          ? content.image_post_info.images
+              .map((v: any) => v?.display_image?.url_list?.[0] || '')
+              .filter(Boolean)
+          : [],
+        music,
+      };
+    } catch {
+      return {
+        type: 'image',
+        id: '',
+        createTime: 0,
+        desc: '',
+        isTurnOffComment: false,
+        hashtag: [],
+        isADS: false,
+        author,
+        statistics,
+        images: [],
+        music,
+      };
+    }
+  }
+
+  private createVideoResponse(
+    content: TiktokAwemeItem,
+    author: TiktokAuthor,
+    statistics: TiktokStatistics,
+    music: TiktokMusic,
+    formats?: TiktokVideoFormat[],
+  ): TiktokVideoResult {
+    // Parse video inline with error handling
+    let video: TiktokVideo;
+    try {
+      video = {
+        ratio: content.video?.ratio || '',
+        duration: content.video?.duration || 0,
+        playAddr: content.video?.play_addr?.url_list || [],
+        downloadAddr: content.video?.download_addr?.url_list || [],
+        cover: content.video?.cover?.url_list || [],
+        dynamicCover: content.video?.dynamic_cover?.url_list || [],
+        originCover: content.video?.origin_cover?.url_list || [],
+        formats: formats || [],
+      };
+    } catch {
+      video = {
+        ratio: '',
+        duration: 0,
+        playAddr: [],
+        downloadAddr: [],
+        cover: [],
+        dynamicCover: [],
+        originCover: [],
+        formats: [],
+      };
+    }
+
+    try {
+      return {
+        type: 'video',
+        id: content.aweme_id || '',
+        createTime: content.create_time || 0,
+        desc: content.desc || '',
+        isTurnOffComment: content.item_comment_settings === 3,
+        hashtag: Array.isArray(content.text_extra)
+          ? content.text_extra
+              .filter((x: any) => x?.hashtag_name !== undefined)
+              .map((v: any) => v.hashtag_name)
+          : [],
+        isADS: content.is_ads || false,
+        author,
+        statistics,
+        video,
+        music,
+      };
+    } catch {
+      return {
+        type: 'video',
+        id: '',
+        createTime: 0,
+        desc: '',
+        isTurnOffComment: false,
+        hashtag: [],
+        isADS: false,
+        author,
+        statistics,
+        video,
+        music,
+      };
+    }
   }
 
   private async fetchPost(

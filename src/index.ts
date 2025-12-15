@@ -1,4 +1,14 @@
 export { TikTokClient } from './api/client';
+export type {
+  TiktokAuthor,
+  TiktokDownloadResponse,
+  TiktokImageResult,
+  TiktokMusic,
+  TiktokStatistics,
+  TiktokVideo,
+  TiktokVideoFormat,
+  TiktokVideoResult,
+} from './api/downloadVideo/types';
 export type { TiktokChallengeResponse } from './api/getChallenge/types';
 export type {
   TiktokPostDetailAPIResponse,
