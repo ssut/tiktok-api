@@ -153,8 +153,9 @@ export class TikTokClient {
       let activeMsToken = this.resolveMsToken(overrides);
       const retryOptions = this.resolveRetryOptions(overrides?.retryOptions);
 
-      const data = await retry(async (bail) => {
+      const data = await retry(async (bail, attemptNumber) => {
         try {
+          // Try API method first
           const params = getUserParams({
             username: sanitizedUsername,
             userAgent: USER_AGENT,
@@ -181,6 +182,26 @@ export class TikTokClient {
             activeMsToken = newMsToken;
           }
 
+          // Check if API returned empty text response
+          if (!data || (typeof data === 'string' && data === '')) {
+            debug(
+              'API returned empty text response for user %s, trying fallback on attempt %d',
+              username,
+              attemptNumber,
+            );
+            // Try fallback method within retry
+            const fallbackResult = await this.getUserFromProfilePage(
+              username,
+              overrides,
+            );
+            if (fallbackResult.data) {
+              debug('Fallback method succeeded for user %s', username);
+              return fallbackResult.data;
+            }
+            // If fallback also failed, throw to trigger retry
+            throw new Error('API_EMPTY_RESPONSE');
+          }
+
           if (
             [
               TiktokError.USER_NOT_EXIST,
@@ -193,8 +214,32 @@ export class TikTokClient {
             return null;
           }
 
+          // Check if API returned empty data
+          if (
+            !data.userInfo?.user?.uniqueId ||
+            Object.keys(data.userInfo?.user || {}).length === 0
+          ) {
+            debug(
+              'API returned empty data for user %s, trying fallback on attempt %d',
+              username,
+              attemptNumber,
+            );
+            // Try fallback method within retry
+            const fallbackResult = await this.getUserFromProfilePage(
+              username,
+              overrides,
+            );
+            if (fallbackResult.data) {
+              debug('Fallback method succeeded for user %s', username);
+              return fallbackResult.data;
+            }
+            // If fallback also failed, throw to trigger retry
+            throw new Error('API_AND_FALLBACK_EMPTY');
+          }
+
           return data;
         } catch (error: unknown) {
+          // If it's a permanent error, bail out
           if (
             isAxiosError(error) &&
             (error.response?.status === 400 ||
@@ -203,64 +248,46 @@ export class TikTokClient {
             bail(new Error('INVALID_ENTITY'));
             return null;
           }
+
+          // For other errors, try fallback before retrying
+          debug(
+            'API method failed for user %s on attempt %d: %s, trying fallback',
+            username,
+            attemptNumber,
+            (error as Error).message,
+          );
+
+          const fallbackResult = await this.getUserFromProfilePage(
+            username,
+            overrides,
+          );
+
+          if (fallbackResult.data) {
+            debug('Fallback method succeeded for user %s', username);
+            return fallbackResult.data;
+          }
+
+          // If both methods failed, throw to trigger retry
           throw error;
         }
       }, retryOptions);
 
-      // Check if API returned empty data
-      if (
-        data &&
-        (!data.userInfo?.user?.uniqueId ||
-          Object.keys(data.userInfo?.user || {}).length === 0)
-      ) {
-        debug(
-          'API returned empty data for user %s, trying fallback profile page fetch',
-          username,
-        );
-        const fallbackResult = await this.getUserFromProfilePage(
-          username,
-          overrides,
-        );
-
-        if (fallbackResult) {
-          debug('Fallback method succeeded for user %s', username);
-          return { ...fallbackResult, method: 'fallback' };
-        }
-      }
-
+      // At this point, we have successful data (either from API or fallback)
       return { data, msToken: extractedMsToken, method: 'api' };
     } catch (error: unknown) {
-      // Try fallback method when API fails
-      debug(
-        'API method failed for user %s: %s, trying fallback',
-        username,
-        (error as Error).message,
-      );
-      const fallbackResult = await this.getUserFromProfilePage(
-        username,
-        overrides,
-      );
-
-      // If fallback succeeded, return its result
-      if (fallbackResult.data) {
-        debug('Fallback method succeeded for user %s', username);
-        return { ...fallbackResult, method: 'fallback' };
-      }
-
-      // If fallback also failed, return the fallback error or original error
-      if (fallbackResult.error) {
-        debug(
-          'Fallback also failed for user %s: %s',
-          username,
-          fallbackResult.error,
-        );
-        return fallbackResult;
-      }
-
+      // Handle errors that couldn't be resolved by retry
       if ((error as Error).message === 'USER_NOT_EXIST') {
         return {
           error: 'USER_NOT_EXIST',
           statusCode: TiktokError.USER_NOT_EXIST,
+          data: null,
+        };
+      }
+
+      if ((error as Error).message === 'INVALID_ENTITY') {
+        return {
+          error: 'INVALID_ENTITY',
+          statusCode: TiktokError.INVALID_ENTITY,
           data: null,
         };
       }
