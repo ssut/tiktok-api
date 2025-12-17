@@ -10,4 +10,5 @@ export enum TiktokError {
   USER_NOT_EXIST = 10202,
 
   INVALID_ENTITY = 10201,
+  INVALID_PROFILE = 10221,
 }

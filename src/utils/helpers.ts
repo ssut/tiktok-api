@@ -18,16 +18,33 @@ export const generateOdinId = () => {
   return `${prefix}${random}`;
 };
 
-export const extractMsToken = (cookies?: string[]): string | undefined => {
-  if (!cookies || !Array.isArray(cookies)) {
+export const extractMsToken = (
+  headers: Record<string, any>,
+): string | undefined => {
+  if (!headers) {
     return undefined;
   }
 
-  const msTokenCookie = cookies.find((cookie) => cookie.startsWith('msToken='));
-  if (!msTokenCookie) {
-    return undefined;
+  // First try to extract from set-cookie header
+  const setCookies = headers['set-cookie'];
+  if (setCookies) {
+    const cookies = Array.isArray(setCookies) ? setCookies : [setCookies];
+    const msTokenCookie = cookies.find((cookie: string) =>
+      cookie.includes('msToken='),
+    );
+    if (msTokenCookie) {
+      const match = msTokenCookie.match(/msToken=([^;]+)/);
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
   }
 
-  const match = msTokenCookie.match(/msToken=([^;]+)/);
-  return match ? match[1] : undefined;
+  // Second try to extract from x-ms-token header
+  const xMsToken = headers['x-ms-token'];
+  if (xMsToken) {
+    return xMsToken;
+  }
+
+  return undefined;
 };

@@ -1,11 +1,19 @@
 import retry, { type Options as RetryOptions } from 'async-retry';
-import Axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import Axios, {
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  isAxiosError,
+} from 'axios';
+import createDebug from 'debug';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { TiktokError } from '../constants/errors';
 import { RETRY_OPTIONS } from '../constants/retry';
 import { TIKTOK_URL, USER_AGENT } from '../constants/urls';
 import { extractMsToken } from '../utils/helpers';
 import { signUrl } from '../utils/signUrl';
+
+const debug = createDebug('tiktok-api:client');
+
 import { buildTiktokApiParams } from './downloadVideo/params';
 import type {
   TiktokAPIResponse,
@@ -166,7 +174,7 @@ export class TikTokClient {
             axiosConfig,
           );
 
-          const newMsToken = extractMsToken(headers['set-cookie']);
+          const newMsToken = extractMsToken(headers);
           if (newMsToken) {
             extractedMsToken = newMsToken;
             this.msToken = newMsToken;
@@ -174,19 +182,23 @@ export class TikTokClient {
           }
 
           if (
-            data.statusCode === TiktokError.USER_NOT_EXIST ||
-            data.statusCode === TiktokError.USER_BAN ||
-            data.statusCode === TiktokError.USER_PRIVATE
+            [
+              TiktokError.USER_NOT_EXIST,
+              TiktokError.USER_BAN,
+              TiktokError.USER_PRIVATE,
+              TiktokError.INVALID_PROFILE,
+            ].includes(data.statusCode)
           ) {
             bail(new Error('USER_NOT_EXIST'));
             return null;
           }
 
           return data;
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (
-            error.response?.status === 400 ||
-            error.response?.data?.statusCode === TiktokError.INVALID_ENTITY
+            isAxiosError(error) &&
+            (error.response?.status === 400 ||
+              error.response?.data?.statusCode === TiktokError.INVALID_ENTITY)
           ) {
             bail(new Error('INVALID_ENTITY'));
             return null;
@@ -195,9 +207,57 @@ export class TikTokClient {
         }
       }, retryOptions);
 
-      return { data, msToken: extractedMsToken };
-    } catch (error: any) {
-      if (error?.message === 'USER_NOT_EXIST') {
+      // Check if API returned empty data
+      if (
+        data &&
+        (!data.userInfo?.user?.uniqueId ||
+          Object.keys(data.userInfo?.user || {}).length === 0)
+      ) {
+        debug(
+          'API returned empty data for user %s, trying fallback profile page fetch',
+          username,
+        );
+        const fallbackResult = await this.getUserFromProfilePage(
+          username,
+          overrides,
+        );
+
+        if (fallbackResult) {
+          debug('Fallback method succeeded for user %s', username);
+          return { ...fallbackResult, method: 'fallback' };
+        }
+      }
+
+      return { data, msToken: extractedMsToken, method: 'api' };
+    } catch (error: unknown) {
+      // Try fallback method when API fails
+      debug(
+        'API method failed for user %s: %s, trying fallback',
+        username,
+        (error as Error).message,
+      );
+      const fallbackResult = await this.getUserFromProfilePage(
+        username,
+        overrides,
+      );
+
+      // If fallback succeeded, return its result
+      if (fallbackResult.data) {
+        debug('Fallback method succeeded for user %s', username);
+        return { ...fallbackResult, method: 'fallback' };
+      }
+
+      // If fallback also failed, return the fallback error or original error
+      if (fallbackResult.error) {
+        debug(
+          'Fallback also failed for user %s: %s',
+          username,
+          fallbackResult.error,
+        );
+        return fallbackResult;
+      }
+
+      if ((error as Error).message === 'USER_NOT_EXIST') {
         return {
           error: 'USER_NOT_EXIST',
           statusCode: TiktokError.USER_NOT_EXIST,
@@ -252,7 +312,7 @@ export class TikTokClient {
               axiosConfig,
             );
 
-          const newMsToken = extractMsToken(headers['set-cookie']);
+          const newMsToken = extractMsToken(headers);
           if (newMsToken) {
             this.msToken = newMsToken;
             activeMsToken = newMsToken;
@@ -982,7 +1042,7 @@ export class TikTokClient {
             axiosConfig,
           );
 
-        const newMsToken = headers['x-ms-token'] as string | undefined;
+        const newMsToken = extractMsToken(headers);
         if (newMsToken) {
           this.msToken = newMsToken;
           activeMsToken = newMsToken;
@@ -1042,7 +1102,7 @@ export class TikTokClient {
             axiosConfig,
           );
 
-        const newMsToken = headers['x-ms-token'] as string | undefined;
+        const newMsToken = extractMsToken(headers);
         if (newMsToken) {
           this.msToken = newMsToken;
           activeMsToken = newMsToken;
@@ -1104,7 +1164,7 @@ export class TikTokClient {
             axiosConfig,
           );
 
-        const newMsToken = headers['x-ms-token'] as string | undefined;
+        const newMsToken = extractMsToken(headers);
         if (newMsToken) {
           this.msToken = newMsToken;
           activeMsToken = newMsToken;
@@ -1164,7 +1224,7 @@ export class TikTokClient {
             axiosConfig,
           );
 
-        const newMsToken = headers['x-ms-token'] as string | undefined;
+        const newMsToken = extractMsToken(headers);
         if (newMsToken) {
           this.msToken = newMsToken;
           activeMsToken = newMsToken;
@@ -1225,7 +1285,7 @@ export class TikTokClient {
             axiosConfig,
           );
 
-        const newMsToken = headers['x-ms-token'] as string | undefined;
+        const newMsToken = extractMsToken(headers);
         if (newMsToken) {
           this.msToken = newMsToken;
           activeMsToken = newMsToken;
@@ -1684,7 +1744,7 @@ export class TikTokClient {
             axiosConfig,
           );
 
-        const newMsToken = headers['x-ms-token'] as string | undefined;
+        const newMsToken = extractMsToken(headers);
         if (newMsToken) {
           this.msToken = newMsToken;
           activeMsToken = newMsToken;
@@ -1709,5 +1769,140 @@ export class TikTokClient {
         throw error;
       }
     }, retryOptions);
+  }
+
+  /**
+   * Fallback method to fetch user profile by scraping the profile page
+   * This is used when the API method fails (e.g., due to encryption changes)
+   */
+  private async getUserFromProfilePage(
+    username: string,
+    overrides?: RequestOverrides,
+  ): Promise<TiktokStalkUserResponse> {
+    try {
+      const sanitizedUsername = username.replace('@', '');
+      const url = `https://www.tiktok.com/@${sanitizedUsername}`;
+      const axiosConfig = this.buildAxiosConfig(overrides);
+      const activeMsToken = this.resolveMsToken(overrides);
+
+      // Build headers with msToken cookie if available
+      const cookieHeader = activeMsToken ? `msToken=${activeMsToken}` : '';
+
+      const { data: html, headers } = await this.axios.get<string>(url, {
+        ...axiosConfig,
+        headers: {
+          ...(axiosConfig?.headers || {}),
+          accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          'accept-language': 'en-US,en;q=0.9,ko;q=0.8,ja;q=0.7',
+          'cache-control': 'no-cache',
+          pragma: 'no-cache',
+          priority: 'u=0, i',
+          'sec-ch-ua':
+            '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"',
+          'sec-fetch-dest': 'document',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-site': 'same-origin',
+          'sec-fetch-user': '?1',
+          'upgrade-insecure-requests': '1',
+          'user-agent': USER_AGENT,
+          ...(cookieHeader && { cookie: cookieHeader }),
+        },
+      });
+
+      // Extract msToken from response headers and update if found
+      const newMsToken = extractMsToken(headers);
+      if (newMsToken) {
+        this.msToken = newMsToken;
+      }
+
+      // Extract the JSON data from the HTML
+      const scriptMatch = html.match(
+        /<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)<\/script>/,
+      );
+
+      if (!scriptMatch) {
+        debug('Could not find data script in profile page for %s', username);
+        return {
+          error: 'PARSING_ERROR',
+          statusCode: 0,
+          data: null,
+        };
+      }
+
+      try {
+        const jsonData = JSON.parse(scriptMatch[1]);
+        const webappUserDetail =
+          jsonData?.__DEFAULT_SCOPE__?.['webapp.user-detail'];
+
+        if (!webappUserDetail) {
+          debug('No webapp.user-detail found in profile page for %s', username);
+          return {
+            error: 'USER_NOT_EXIST',
+            statusCode: TiktokError.USER_NOT_EXIST,
+            data: null,
+          };
+        }
+
+        // Check for user status errors
+        if (
+          [TiktokError.USER_NOT_EXIST, TiktokError.INVALID_PROFILE].includes(
+            webappUserDetail.statusCode,
+          )
+        ) {
+          return {
+            error: 'USER_NOT_EXIST',
+            statusCode: TiktokError.USER_NOT_EXIST,
+            data: null,
+          };
+        }
+
+        if (webappUserDetail.statusCode === TiktokError.USER_PRIVATE) {
+          return {
+            error: 'USER_PRIVATE',
+            statusCode: TiktokError.USER_PRIVATE,
+            data: null,
+          };
+        }
+
+        if (webappUserDetail.statusCode === TiktokError.USER_BAN) {
+          return {
+            error: 'USER_BAN',
+            statusCode: TiktokError.USER_BAN,
+            data: null,
+          };
+        }
+
+        // Return the data in the expected format
+        debug(
+          'Successfully extracted user data from profile page for %s',
+          username,
+        );
+        return {
+          data: webappUserDetail,
+          msToken: newMsToken || this.msToken,
+        };
+      } catch (parseError) {
+        debug(
+          'Failed to parse JSON from profile page for %s: %s',
+          username,
+          parseError,
+        );
+        return {
+          error: 'PARSING_ERROR',
+          statusCode: 0,
+          data: null,
+        };
+      }
+    } catch (error: any) {
+      debug('Failed to fetch profile page for %s: %s', username, error.message);
+      return {
+        error: 'UNKNOWN_ERROR',
+        statusCode: 0,
+        data: null,
+      };
+    }
   }
 }

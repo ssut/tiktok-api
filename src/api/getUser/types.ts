@@ -3,6 +3,7 @@ export type TiktokStalkUserResponse = {
   statusCode?: number;
   data: TiktokUserDetailResponse | null;
   msToken?: string;
+  method?: 'api' | 'fallback';
 };
 
 // Raw TikTok user/detail payload (matches sample in result-samsung.json).
